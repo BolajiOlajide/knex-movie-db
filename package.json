@@ -1,0 +1,15 @@
+{
+  "name": "knex-movie-db",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:BolajiOlajide/knex-movie-db.git",
+  "author": "Bolaji Olajide",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^7.0.0",
+    "global": "^4.3.2",
+    "knex": "^0.16.5",
+    "pg": "^7.10.0",
+    "sqlite3": "^4.0.6"
+  }
+}
