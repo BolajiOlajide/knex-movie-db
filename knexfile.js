@@ -7,7 +7,8 @@ module.exports = {
     connection: { filename: './movie.sqlite' },
     migrations: { tableName: 'knex_migrations' },
     seeds: { directory: './seeds' },
-    debug: false
+    debug: false,
+    useNullAsDefault: true
   },
 
   production: {
