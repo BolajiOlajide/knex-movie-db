@@ -1,7 +1,10 @@
 'use strict';
-
 const knex = require('../db');
 const dbUtil = require('../utils/db_util');
+const {
+  createMovieRelationObject
+} = require('../utils/r');
+
 
 module.exports = {
   async listTags() {
@@ -80,5 +83,83 @@ module.exports = {
     const total = await knex('movie').count('* as total')
     knex.destroy();
     return { rows, total: total[0].total, pgSize };
+  },
+  async deleteMovie(movieID) {
+    const promise = await knex('movie', 'count').where('id', movieID).del();
+    knex.destroy();
+    return promise;
+  },
+  async addMovie(m) {
+    const { actors, tags, ...movie } = m;
+    delete movie.id; // esnure no id is supplied for rhe insert operation
+
+    let _actors, _tags, movieID;
+
+    const trxPromise = await knex.transaction(trx => trx
+      .insert(movie, 'id').into('movie')
+      .then(ids => {
+        movieID = ids[0];
+        movie.id = movieID;
+
+        _actors = createMovieRelationObject('person_id', movieID)(actors);
+        _tags = createMovieRelationObject('tag_id', movieID)(tags);
+        if (_actors.length > 0) return trx.insert(_actors).into('movie_actor');
+      })
+      .then(() => {
+        if (_tags.length > 0) trx.insert(_tags).into('movie_tag');
+      })
+      .then(() => movieID)
+    );
+    knex.destroy();
+    return trxPromise;
+  },
+  async getMovieTags(movieID) {
+    return knex('movie_tag')
+      .pluck('tag_id').where('movie_id', movieID);
+  },
+  async getMovieActors(movieID) {
+    return knex('movie_actor')
+      .pluck('person_id').where('movie_id', movieID);
+  },
+  async updateMovie(movie) {
+    const {
+      actors: newActorIds,
+      tags: newTagIds,
+      id: movieId,
+      ...movieData
+    } = movie;
+
+    const [actorResponse, tagResponse] = await Promise.all([
+      this.getMovieActors(movieId),
+      this.getMovieTags(movieId)
+    ]);
+
+    const actorDelta = dbUtil.getMMDelta(newActorIds, actorResponse, 'person_id', movieId);
+    const tagDelta = dbUtil.getMMDelta(newTagIds, tagResponse, 'tag_id', movieId);
+
+
+
+    const promise = await knex.transaction(trx => {
+      const queriesToRun = [
+        trx('movie').where('id', movieId).update(movieData),
+        trx('movie_actor').whereIn('person_id', actorDelta.IDsToDelete)
+          .andWhere('movie_id', movieId).del(),
+        trx('movie_tag').whereIn('tag_id', tagDelta.IDsToDelete)
+          .andWhere('movie_id', movieId).del()
+      ];
+
+      if (actorDelta.rowsToAdd.length > 0) {
+        queriesToRun.push(trx('movie_actor').insert(actorDelta.rowsToAdd));
+      }
+
+      if (tagDelta.rowsToAdd.length > 0) {
+        queriesToRun.push(trx('movie_tag').insert(tagDelta.rowsToAdd));
+      }
+
+      return Promise.all(queriesToRun);
+    });
+
+    knex.destroy();
+    return promise;
   }
 };

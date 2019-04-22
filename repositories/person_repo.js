@@ -11,5 +11,10 @@ module.exports = {
       .orderBy('name');
     knex.destroy();
     return people;
+  },
+  async addPerson(person) {
+    const promise = await knex('person').insert(person, 'id');
+    knex.destroy();
+    return promise;
   }
 };
